@@ -9,27 +9,32 @@ import java.awt.geom.Rectangle2D;
 import java.io.*;
 import java.util.List;
 
+import org.antlr.v4.runtime.*;
+import org.antlr.v4.runtime.tree.*;
+
 public class SimpleTextEditor extends JFrame {
     private JTextArea textArea;
-    private JTextArea terminal;
+    private JTextArea terminalCustom;
+    private JTextArea terminalAntlr;
     private JSlider fontSizeSlider;
     private JSlider terminalFontSizeSlider;
     private LineNumberPanel lineNumberPanel;
-    private JSplitPane splitPane;
+    private JSplitPane mainSplitPane;
+    private JSplitPane terminalSplitPane;
 
     public SimpleTextEditor() {
         createMenuBar();
-        createMainContent(); // Теперь создает и редактор, и терминал
+        createMainContent();
         createSlider();
 
-        // Устанавливаем начальную позицию разделителя (70% для редактора, 30% для терминала)
         SwingUtilities.invokeLater(() -> {
-            splitPane.setDividerLocation(0.7);
+            mainSplitPane.setDividerLocation(0.5);
+            terminalSplitPane.setDividerLocation(0.5);
         });
 
         setTitle("Simple Text Editor - Console.ReadLine Parser");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(800, 600);
+        setSize(1200, 700);
         setLocationRelativeTo(null);
     }
 
@@ -46,7 +51,8 @@ public class SimpleTextEditor extends JFrame {
         saveItem.addActionListener(e -> saveFile());
         closeItem.addActionListener(e -> {
             textArea.setText("");
-            terminal.setText("");
+            terminalCustom.setText("");
+            terminalAntlr.setText("");
         });
 
         fileMenu.add(openItem);
@@ -66,13 +72,20 @@ public class SimpleTextEditor extends JFrame {
 
         // Run Menu
         JMenu runMenu = new JMenu("Run");
-        JMenuItem runParserItem = new JMenuItem("Run Parser");
+        JMenuItem runParserItem = new JMenuItem("Run Both Parsers");
+        JMenuItem runCustomItem = new JMenuItem("Run Custom Parser");
+        JMenuItem runAntlrItem = new JMenuItem("Run ANTLR Parser");
         JMenuItem showTokensItem = new JMenuItem("Show Tokens");
 
-        runParserItem.addActionListener(e -> runParser());
+        runParserItem.addActionListener(e -> runBothParsers());
+        runCustomItem.addActionListener(e -> runCustomParser());
+        runAntlrItem.addActionListener(e -> runAntlrParser());
         showTokensItem.addActionListener(e -> showTokens());
 
         runMenu.add(runParserItem);
+        runMenu.add(runCustomItem);
+        runMenu.add(runAntlrItem);
+        runMenu.addSeparator();
         runMenu.add(showTokensItem);
 
         menuBar.add(fileMenu);
@@ -83,83 +96,75 @@ public class SimpleTextEditor extends JFrame {
     }
 
     private void createMainContent() {
+        // Верхняя часть: редактор кода
         JPanel editorPanel = new JPanel(new BorderLayout());
-
-        // Text area
         textArea = new JTextArea();
         textArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
         textArea.setText("// Enter your code here\n// Example:\nConsole.ReadLine();\nConsole.ReadLine(variable);\n");
 
-        // Line numbers panel
         lineNumberPanel = new LineNumberPanel(textArea);
-
         JScrollPane scrollPane = new JScrollPane(textArea);
         scrollPane.setRowHeaderView(lineNumberPanel);
         scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
         scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_ALWAYS);
-
         editorPanel.add(scrollPane, BorderLayout.CENTER);
 
-        // Создаем панель терминала
-        JPanel terminalPanel = createTerminalPanel();
+        // Нижняя часть: два терминала
+        JPanel terminalsPanel = createTerminalsPanel();
 
-        // Создаем разделитель (SplitPane) между редактором и терминалом
-        splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, editorPanel, terminalPanel);
-        splitPane.setResizeWeight(0.7); // 70% для редактора, 30% для терминала
-        splitPane.setOneTouchExpandable(true); // Кнопки для быстрого сворачивания/разворачивания
-        splitPane.setContinuousLayout(true); // Плавное изменение размера
+        // Главный разделитель: редактор сверху, терминалы снизу
+        mainSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, editorPanel, terminalsPanel);
+        mainSplitPane.setResizeWeight(0.5);
+        mainSplitPane.setOneTouchExpandable(true);
+        mainSplitPane.setContinuousLayout(true);
 
-        add(splitPane, BorderLayout.CENTER);
+        add(mainSplitPane, BorderLayout.CENTER);
     }
 
-    private JPanel createTerminalPanel() {
+    private JPanel createTerminalsPanel() {
+        // Создаем два терминала рядом друг с другом
+        JPanel customPanel = createSingleTerminalPanel("Custom Parser", terminalCustom = new JTextArea());
+        JPanel antlrPanel = createSingleTerminalPanel("ANTLR Parser", terminalAntlr = new JTextArea());
+
+        terminalCustom.append("Ready to analyze code...\n");
+        terminalCustom.append("=====================================\n");
+
+        terminalAntlr.append("ANTLR parser ready...\n");
+        terminalAntlr.append("=====================================\n");
+
+        // Разделитель между двумя терминалами
+        terminalSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, customPanel, antlrPanel);
+        terminalSplitPane.setResizeWeight(0.5);
+        terminalSplitPane.setOneTouchExpandable(true);
+        terminalSplitPane.setContinuousLayout(true);
+
+        JPanel wrapper = new JPanel(new BorderLayout());
+        wrapper.add(terminalSplitPane, BorderLayout.CENTER);
+        return wrapper;
+    }
+
+    private JPanel createSingleTerminalPanel(String title, JTextArea terminal) {
         JPanel panel = new JPanel(new BorderLayout());
 
-        // Заголовок терминала с контролами
+        // Заголовок
         JPanel headerPanel = new JPanel(new BorderLayout());
-        JLabel terminalLabel = new JLabel(" Terminal Output");
-        terminalLabel.setFont(new Font("Dialog", Font.BOLD, 12));
-
-        // Слайдер для размера шрифта терминала
-        JPanel fontControlPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        fontControlPanel.add(new JLabel("Terminal Font: "));
-
-        terminalFontSizeSlider = new JSlider(8, 24, 11);
-        terminalFontSizeSlider.setPreferredSize(new Dimension(100, 20));
-        terminalFontSizeSlider.addChangeListener(e -> {
-            if (!terminalFontSizeSlider.getValueIsAdjusting()) {
-                updateTerminalFontSize();
-            }
-        });
-
-        fontControlPanel.add(terminalFontSizeSlider);
-
-        headerPanel.add(terminalLabel, BorderLayout.WEST);
-        headerPanel.add(fontControlPanel, BorderLayout.EAST);
+        JLabel label = new JLabel(" " + title);
+        label.setFont(new Font("Dialog", Font.BOLD, 12));
+        headerPanel.add(label, BorderLayout.WEST);
         headerPanel.setBackground(new Color(230, 230, 230));
 
         // Терминал
-        terminal = new JTextArea(5, 20);
         terminal.setEditable(false);
         terminal.setBackground(new Color(240, 240, 240));
         terminal.setFont(new Font("Monospaced", Font.PLAIN, 11));
-        terminal.setText("Parser Terminal\n");
-        terminal.append("Ready to analyze code...\n");
-        terminal.append("=====================================\n");
 
-        JScrollPane terminalScroll = new JScrollPane(terminal);
-        terminalScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
+        JScrollPane scrollPane = new JScrollPane(terminal);
+        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
 
         panel.add(headerPanel, BorderLayout.NORTH);
-        panel.add(terminalScroll, BorderLayout.CENTER);
+        panel.add(scrollPane, BorderLayout.CENTER);
 
         return panel;
-    }
-
-    private void updateTerminalFontSize() {
-        int size = terminalFontSizeSlider.getValue();
-        Font font = new Font("Monospaced", Font.PLAIN, size);
-        terminal.setFont(font);
     }
 
     private void createSlider() {
@@ -177,6 +182,18 @@ public class SimpleTextEditor extends JFrame {
         });
 
         sliderPanel.add(fontSizeSlider);
+
+        // Слайдер для терминалов
+        sliderPanel.add(new JLabel("  Terminal Font: "));
+        terminalFontSizeSlider = new JSlider(8, 24, 11);
+        terminalFontSizeSlider.setPreferredSize(new Dimension(100, 40));
+        terminalFontSizeSlider.addChangeListener(e -> {
+            if (!terminalFontSizeSlider.getValueIsAdjusting()) {
+                updateTerminalFontSize();
+            }
+        });
+        sliderPanel.add(terminalFontSizeSlider);
+
         add(sliderPanel, BorderLayout.NORTH);
     }
 
@@ -187,12 +204,20 @@ public class SimpleTextEditor extends JFrame {
         lineNumberPanel.setFont(font);
     }
 
+    private void updateTerminalFontSize() {
+        int size = terminalFontSizeSlider.getValue();
+        Font font = new Font("Monospaced", Font.PLAIN, size);
+        terminalCustom.setFont(font);
+        terminalAntlr.setFont(font);
+    }
+
     private void openFile() {
         JFileChooser fileChooser = new JFileChooser();
         if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             try (BufferedReader reader = new BufferedReader(new FileReader(fileChooser.getSelectedFile()))) {
                 textArea.read(reader, null);
-                terminal.append("> Opened file: " + fileChooser.getSelectedFile().getName() + "\n");
+                terminalCustom.append("> Opened: " + fileChooser.getSelectedFile().getName() + "\n");
+                terminalAntlr.append("> Opened: " + fileChooser.getSelectedFile().getName() + "\n");
             } catch (IOException ex) {
                 showError("Error opening file: " + ex.getMessage());
             }
@@ -204,7 +229,8 @@ public class SimpleTextEditor extends JFrame {
         if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(fileChooser.getSelectedFile()))) {
                 textArea.write(writer);
-                terminal.append("> Saved file: " + fileChooser.getSelectedFile().getName() + "\n");
+                terminalCustom.append("> Saved: " + fileChooser.getSelectedFile().getName() + "\n");
+                terminalAntlr.append("> Saved: " + fileChooser.getSelectedFile().getName() + "\n");
             } catch (IOException ex) {
                 showError("Error saving file: " + ex.getMessage());
             }
@@ -222,23 +248,19 @@ public class SimpleTextEditor extends JFrame {
     private void openDocFile(String filename) {
         try {
             File file = new File(filename);
-
             if (!file.exists()) {
                 String projectRoot = System.getProperty("user.dir");
                 file = new File(projectRoot, filename);
-
                 if (!file.exists()) {
-                    showError("File " + filename + " not found in project root.\n" +
-                            "Looked in: " + file.getAbsolutePath());
+                    showError("File " + filename + " not found in project root.\nLooked in: " + file.getAbsolutePath());
                     return;
                 }
             }
-
             if (Desktop.isDesktopSupported()) {
                 Desktop desktop = Desktop.getDesktop();
                 if (desktop.isSupported(Desktop.Action.OPEN)) {
                     desktop.open(file);
-                    terminal.append("> Opened file: " + file.getAbsolutePath() + "\n");
+                    terminalCustom.append("> Opened: " + file.getAbsolutePath() + "\n");
                 } else {
                     showError("Opening files is not supported on this system.");
                 }
@@ -247,95 +269,115 @@ public class SimpleTextEditor extends JFrame {
             }
         } catch (IOException ex) {
             showError("Error opening file " + filename + ": " + ex.getMessage());
-        } catch (Exception ex) {
-            showError("Unexpected error: " + ex.getMessage());
         }
     }
 
-    /**
-     * Запускает парсер для анализа кода в текстовой области
-     */
-    private void runParser() {
-        terminal.setText(""); // Очищаем терминал
-        terminal.append("=== Running Parser ===\n");
-        terminal.append("=====================================\n\n");
+    private void runBothParsers() {
+        runCustomParser();
+        runAntlrParser();
+    }
+
+    private void runCustomParser() {
+        terminalCustom.setText("");
+        terminalCustom.append("=== Custom Parser ===\n");
+        terminalCustom.append("=====================================\n\n");
 
         String code = textArea.getText();
-
         if (code.trim().isEmpty()) {
-            terminal.append("> Code area is empty\n");
-            terminal.append("> Empty program is ACCEPTED ✓\n");
+            terminalCustom.append("> Empty program is ACCEPTED ✓\n");
             return;
         }
 
-        // Запускаем парсер
-        Parser.ParseResult result = Parser.parseCode(code);
-
+        CustomParser.ParseResult result = CustomParser.parseCode(code);
         if (result.isSuccess()) {
-            terminal.append(result.getTrace());
-            terminal.append("\n=====================================\n");
-            terminal.append("✓ SUCCESS: Code is syntactically correct!\n");
-
-            // Показываем количество операторов
+            terminalCustom.append(result.getTrace());
+            terminalCustom.append("\n=====================================\n");
+            terminalCustom.append("✓ SUCCESS: Code is syntactically correct!\n");
             if (result.getTokens() != null) {
                 long count = result.getTokens().stream()
                         .filter(t -> t.getType() == Token.TokenType.CONSOLE_READLINE)
                         .count();
-                terminal.append(String.format("Found %d Console.ReadLine statement(s)\n", count));
+                terminalCustom.append(String.format("Found %d Console.ReadLine statement(s)\n", count));
             }
-
-            showMessage("Parse Success", "Code is syntactically correct!");
         } else {
-            terminal.append(result.getTrace());
-            terminal.append("\n=====================================\n");
-            terminal.append("✗ FAILED: Code contains syntax errors!\n\n");
-
+            terminalCustom.append(result.getTrace());
+            terminalCustom.append("\n=====================================\n");
+            terminalCustom.append("✗ FAILED: Code contains syntax errors!\n\n");
             List<String> errors = result.getErrors();
-            terminal.append(String.format("Total errors found: %d\n\n", errors.size()));
-
+            terminalCustom.append(String.format("Total errors: %d\n\n", errors.size()));
             for (int i = 0; i < errors.size(); i++) {
-                terminal.append(String.format("%d. %s\n", i + 1, errors.get(i)));
+                terminalCustom.append(String.format("%d. %s\n", i + 1, errors.get(i)));
             }
-
-            // Показываем диалог с ошибками
-            StringBuilder errorDialog = new StringBuilder();
-            errorDialog.append(String.format("Found %d error(s):\n\n", errors.size()));
-            for (int i = 0; i < Math.min(5, errors.size()); i++) {
-                errorDialog.append(errors.get(i)).append("\n");
-            }
-            if (errors.size() > 5) {
-                errorDialog.append(String.format("\n... and %d more error(s). See terminal for details.", errors.size() - 5));
-            }
-
-            showError(errorDialog.toString());
         }
     }
 
-    /**
-     * Показывает все токены из кода
-     */
-    private void showTokens() {
-        terminal.setText("");
-        terminal.append("=== Token Analysis ===\n");
-        terminal.append("=====================================\n\n");
+    private void runAntlrParser() {
+        terminalAntlr.setText("");
+        terminalAntlr.append("=== ANTLR Parser ===\n");
+        terminalAntlr.append("=====================================\n\n");
 
         String code = textArea.getText();
-
         if (code.trim().isEmpty()) {
-            terminal.append("> Code area is empty\n");
+            terminalAntlr.append("> Empty program is ACCEPTED ✓\n");
+            return;
+        }
+
+        try {
+            CharStream input = CharStreams.fromString(code);
+            ConsoleReadLineLexer lexer = new ConsoleReadLineLexer(input);
+            CommonTokenStream tokens = new CommonTokenStream(lexer);
+            ConsoleReadLineParser antlrParser = new ConsoleReadLineParser(tokens);
+
+            // Кастомный error listener
+            antlrParser.removeErrorListeners();
+            AntlrErrorListener errorListener = new AntlrErrorListener();
+            antlrParser.addErrorListener(errorListener);
+
+            // Парсинг
+            ConsoleReadLineParser.ProgramContext tree = antlrParser.program();
+
+            if (errorListener.hasErrors()) {
+                terminalAntlr.append("✗ FAILED: Syntax errors found!\n\n");
+                for (String error : errorListener.getErrors()) {
+                    terminalAntlr.append(error + "\n");
+                }
+            } else {
+                terminalAntlr.append("✓ SUCCESS: Code is syntactically correct!\n\n");
+
+                // Подсчет операторов
+                int stmtCount = tree.statement().size();
+                terminalAntlr.append(String.format("Found %d Console.ReadLine statement(s)\n", stmtCount));
+
+                // Показываем дерево разбора
+                terminalAntlr.append("\nParse Tree:\n");
+                terminalAntlr.append(tree.toStringTree(antlrParser) + "\n");
+            }
+
+        } catch (Exception e) {
+            terminalAntlr.append("✗ ERROR: " + e.getMessage() + "\n");
+        }
+    }
+
+    private void showTokens() {
+        terminalCustom.setText("");
+        terminalCustom.append("=== Token Analysis ===\n");
+        terminalCustom.append("=====================================\n\n");
+
+        String code = textArea.getText();
+        if (code.trim().isEmpty()) {
+            terminalCustom.append("> Code area is empty\n");
             return;
         }
 
         try {
             Lexer lexer = new Lexer(code);
             List<Token> tokens = lexer.tokenize();
-
-            terminal.append(String.format("Found %d token(s):\n\n", tokens.size()));
+            terminalCustom.append(String.format("Found %d token(s):\n\n", tokens.size()));
 
             int count = 1;
             for (Token token : tokens) {
                 if (token.getType() != Token.TokenType.EOF) {
-                    terminal.append(String.format("%2d. %-20s | Value: %-20s | Line: %d, Col: %d\n",
+                    terminalCustom.append(String.format("%2d. %-20s | Value: %-20s | Line: %d, Col: %d\n",
                             count++,
                             token.getType(),
                             token.getValue().isEmpty() ? "(empty)" : token.getValue(),
@@ -344,12 +386,10 @@ public class SimpleTextEditor extends JFrame {
                     ));
                 }
             }
-
-            terminal.append("\n=====================================\n");
-            terminal.append("✓ Tokenization completed\n");
-
+            terminalCustom.append("\n=====================================\n");
+            terminalCustom.append("✓ Tokenization completed\n");
         } catch (LexerException e) {
-            terminal.append("> ERROR: " + e.getMessage() + "\n");
+            terminalCustom.append("> ERROR: " + e.getMessage() + "\n");
             showError(e.getMessage());
         }
     }
@@ -362,7 +402,26 @@ public class SimpleTextEditor extends JFrame {
         JOptionPane.showMessageDialog(this, message, "Error", JOptionPane.ERROR_MESSAGE);
     }
 
-    // Custom line number panel
+    // Кастомный error listener для ANTLR
+    static class AntlrErrorListener extends BaseErrorListener {
+        private final java.util.List<String> errors = new java.util.ArrayList<>();
+
+        @Override
+        public void syntaxError(Recognizer<?, ?> recognizer, Object offendingSymbol,
+                                int line, int charPositionInLine, String msg, RecognitionException e) {
+            errors.add(String.format("Line %d:%d - %s", line, charPositionInLine, msg));
+        }
+
+        public boolean hasErrors() {
+            return !errors.isEmpty();
+        }
+
+        public java.util.List<String> getErrors() {
+            return errors;
+        }
+    }
+
+    // Line number panel
     class LineNumberPanel extends JPanel {
         private JTextArea textArea;
         private Font font;
@@ -373,14 +432,12 @@ public class SimpleTextEditor extends JFrame {
             setBackground(Color.LIGHT_GRAY);
             setPreferredSize(new Dimension(40, textArea.getHeight()));
 
-            // Update line numbers when text changes
             textArea.getDocument().addDocumentListener(new DocumentListener() {
                 public void insertUpdate(DocumentEvent e) { repaint(); }
                 public void removeUpdate(DocumentEvent e) { repaint(); }
                 public void changedUpdate(DocumentEvent e) { repaint(); }
             });
 
-            // Update line numbers when component is resized
             textArea.addComponentListener(new ComponentAdapter() {
                 @Override
                 public void componentResized(ComponentEvent e) {
@@ -397,7 +454,6 @@ public class SimpleTextEditor extends JFrame {
         @Override
         protected void paintComponent(Graphics g) {
             super.paintComponent(g);
-
             g.setFont(font);
             g.setColor(Color.BLACK);
 
@@ -405,22 +461,17 @@ public class SimpleTextEditor extends JFrame {
             int fontHeight = fm.getHeight();
             int baseLine = fm.getAscent();
 
-            // Get visible text area bounds
             Rectangle clip = g.getClipBounds();
             int startOffset = textArea.viewToModel2D(new Point(0, clip.y));
             int endOffset = textArea.viewToModel2D(new Point(0, clip.y + clip.height));
 
             try {
-                // Get line numbers for visible area
                 int startLine = textArea.getLineOfOffset(startOffset);
                 int endLine = textArea.getLineOfOffset(endOffset);
-
-                // Calculate width needed for line numbers
                 int maxLineNum = endLine + 1;
                 int maxWidth = fm.stringWidth(String.valueOf(maxLineNum)) + 10;
                 setPreferredSize(new Dimension(maxWidth, textArea.getHeight()));
 
-                // Draw line numbers
                 for (int i = startLine; i <= endLine; i++) {
                     try {
                         Rectangle2D rect = textArea.modelToView2D(textArea.getLineStartOffset(i));
@@ -431,15 +482,11 @@ public class SimpleTextEditor extends JFrame {
                             g.drawString(lineNumber, x, y);
                         }
                     } catch (BadLocationException ex) {
-                        // Skip this line if there's an error
                     }
                 }
             } catch (BadLocationException ex) {
-                // If there's an error, just draw line 1
                 g.drawString("1", 5, baseLine);
             }
-
-            // Revalidate to update the scroll pane if width changed
             revalidate();
         }
     }
